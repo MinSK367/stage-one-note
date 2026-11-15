@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#132e28">
+<title>1단계 전용노트</title>
+<link rel="stylesheet" href="./style.css">
+<script defer src="./exam-data.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<header><div class="frame top"><a class="brand" href="#home">1단계 전용노트</a><nav aria-label="주 메뉴"><a href="#home">홈</a><a href="#study">암기훈련</a><a href="#review">오답노트</a><a href="#history">학습기록</a></nav></div></header>
+<main class="frame" id="screen"></main>
+<template id="home-template">
+  <section class="hero"><div><p class="eyebrow">제4회 천국고시 예상문제</p><h1>계시록 1~7장</h1><p>장별 제목, 성구 단답형, 성구 서술형을 연습하세요.</p><a class="button accent" href="#study">학습 시작 <span aria-hidden="true">→</span></a></div><div class="hero-stat" id="total"></div></section>
+  <section class="section"><h2>학습 유형</h2><div class="modes" id="modes"></div></section>
+  <section class="section"><h2>장별 학습 성취도</h2><div class="panel chapters" id="chapters"></div></section>
+</template>
+</body>
+</html>
