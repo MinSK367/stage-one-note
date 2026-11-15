@@ -79,7 +79,11 @@ function run() {
   let state = initial();
   try { state = JSON.parse(localStorage.getItem(key)) || initial(); } catch {}
   const screen = document.querySelector('#screen');
-  const settings = {type:'title', chapter:'all'};
+  const chapterLinks = document.querySelector('#chapter-links');
+  const chapters = ['1','2','3','4','5','6','7','all'];
+  const settings = {type:'title', chapter:'1'};
+  const studyHash = (type,chapter) => '#study/'+type+'/'+chapter;
+  const chapterName = chapter => chapter==='all' ? '1~7장 전체' : chapter+'장';
   const date = new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Seoul'});
   const title = (text,description) => '<h1>'+text+'</h1><p class="muted">'+description+'</p>';
   const done = list => list.filter(f => state.mastered[f.id]).length;
@@ -104,7 +108,7 @@ function run() {
     screen.querySelector('#chapters').innerHTML=Array.from({length:7},(_,i)=>{
       const chapter=i+1;
       const list=fields.filter(f=>f.question.chapter===chapter);
-      return '<div class="chapter"><strong>'+chapter+'장</strong>'+progress(done(list),list.length,chapter+'장 성취도')+'<span>'+done(list)+' / '+list.length+'</span></div>';
+      return '<a class="chapter" href="'+studyHash(settings.type,chapter)+'"><strong>'+chapter+'장</strong>'+progress(done(list),list.length,chapter+'장 성취도')+'<span>'+done(list)+' / '+list.length+'</span></a>';
     }).join('');
   }
 
@@ -171,23 +175,29 @@ function run() {
     });
   }
 
-  function study(type) {
+  function study(type,chapter) {
     if(Object.hasOwn(names,type)) settings.type=type;
-    screen.innerHTML=title('암기훈련','유형과 장을 선택하세요. 띄어쓰기와 문장부호는 채점에서 제외합니다.')+'<div class="filters"><label>유형<select id="type">'+Object.entries(names).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label><label>범위<select id="chapter"><option value="all">1~7장 전체</option>'+Array.from({length:7},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'장</option>').join('')+'</select></label></div><div id="exercise"></div>';
-    const chapter=screen.querySelector('#chapter');
+    if(chapters.includes(chapter)) settings.chapter=chapter;
+    const scope=chapterName(settings.chapter);
+    const rows=questions.filter(q=>q.type===settings.type && (settings.chapter==='all'||q.chapter===Number(settings.chapter)));
+    window.history.replaceState(null,'',studyHash(settings.type,settings.chapter));
+    screen.innerHTML=title('암기훈련 · '+scope,'띄어쓰기와 문장부호는 채점에서 제외합니다.')+'<div class="filters"><label>유형<select id="type">'+Object.entries(names).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label></div><div id="exercise"></div>';
     const mode=screen.querySelector('#type');
-    chapter.value=settings.chapter;
     mode.value=settings.type;
-    const update=()=>{
-      settings.type=mode.value;
-      settings.chapter=chapter.value;
-      window.history.replaceState(null,'','#study/'+mode.value);
-      const rows=questions.filter(q=>q.type===mode.value && (chapter.value==='all'||q.chapter===Number(chapter.value)));
-      exercise(rows.map(q=>({q,list:q.fields.map(f=>byId.get(f.id))})),names[mode.value]+' · '+chapter.selectedOptions[0].text,false);
-    };
-    chapter.addEventListener('change',update);
-    mode.addEventListener('change',update);
-    update();
+    mode.addEventListener('change',()=>{
+      study(mode.value,settings.chapter);
+      renderChapterLinks(true);
+      screen.querySelector('#type').focus();
+    });
+    exercise(rows.map(q=>({q,list:q.fields.map(f=>byId.get(f.id))})),names[settings.type]+' · '+scope,false);
+  }
+
+  function renderChapterLinks(inStudy) {
+    chapterLinks.innerHTML=chapters.map(chapter=>{
+      const current=inStudy && chapter===settings.chapter ? ' aria-current="true"' : '';
+      const label=chapter==='all' ? '전체' : chapterName(chapter);
+      return '<a href="'+studyHash(settings.type,chapter)+'"'+current+'>'+label+'</a>';
+    }).join('');
   }
 
   function review(mode) {
@@ -225,16 +235,17 @@ function run() {
   }
 
   function render() {
-    const [page,mode]=location.hash.slice(1).split('/');
+    const [page,mode,chapter]=location.hash.slice(1).split('/');
     const active=['study','review','history'].includes(page)?page:'home';
     for(const link of document.querySelectorAll('nav a')) {
       if(link.hash==='#'+active) link.setAttribute('aria-current','page');
       else link.removeAttribute('aria-current');
     }
-    if(active==='study') study(mode);
+    if(active==='study') study(mode,chapter);
     else if(active==='review') review(mode);
     else if(active==='history') history();
     else home();
+    renderChapterLinks(active==='study');
     window.scrollTo(0,0);
   }
   window.addEventListener('hashchange',render);

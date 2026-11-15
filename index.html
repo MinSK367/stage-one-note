@@ -10,8 +10,15 @@
 <script defer src="./app.js"></script>
 </head>
 <body>
-<header><div class="frame top"><a class="brand" href="#home">1단계 전용노트</a><nav aria-label="주 메뉴"><a href="#home">홈</a><a href="#study">암기훈련</a><a href="#review">오답노트</a><a href="#history">학습기록</a></nav></div></header>
-<main class="frame" id="screen"></main>
+<div class="frame layout">
+<aside class="sidebar"><a class="brand" href="#home">1단계 전용노트</a><nav aria-label="주 메뉴"><a href="#home">홈</a><a href="#study">암기훈련</a><a href="#review">오답노트</a><a href="#history">학습기록</a></nav>
+  <section class="chapter-picker" aria-labelledby="chapter-heading">
+    <h2 id="chapter-heading">장 선택</h2>
+    <div id="chapter-links" class="chapter-links"></div>
+  </section>
+</aside>
+<main id="screen"></main>
+</div>
 <template id="home-template">
   <section class="hero"><div><p class="eyebrow">제4회 천국고시 예상문제</p><h1>계시록 1~7장</h1><p>장별 제목, 성구 단답형, 성구 서술형을 연습하세요.</p><a class="button accent" href="#study">학습 시작 <span aria-hidden="true">→</span></a></div><div class="hero-stat" id="total"></div></section>
   <section class="section"><h2>학습 유형</h2><div class="modes" id="modes"></div></section>
