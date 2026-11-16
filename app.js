@@ -1,6 +1,7 @@
 'use strict';
 
 const names = {title:'계시록 장별 제목', short:'성구 단답형', verse:'성구 서술형'};
+const stages = ['short','title','verse'];
 const marks = ['①', '②'];
 const key = 'stage-one-note:v1';
 const ignored = /[\s\p{P}]/u;
@@ -81,7 +82,7 @@ function run() {
   const screen = document.querySelector('#screen');
   const chapterLinks = document.querySelector('#chapter-links');
   const chapters = ['1','2','3','4','5','6','7','all'];
-  const settings = {type:'title', chapter:'1'};
+  const settings = {type:stages[0], chapter:'1'};
   const studyHash = (type,chapter) => '#study/'+type+'/'+chapter;
   const chapterName = chapter => chapter==='all' ? '1~7장 전체' : chapter+'장';
   const date = new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Seoul'});
@@ -95,15 +96,20 @@ function run() {
     return '<div class="feedback"><strong class="incorrect">'+(input.trim()?'오답':'미입력')+'</strong><br>내 답안 '+(marked.input || '—')+'<br>정답 '+marked.expected+'</div>';
   };
 
+  function stageCard(type,index,href,detail='',active=false) {
+    return '<a class="mode stage-card" href="'+href+'"'+(active?' aria-current="true"':'')+'>'+
+      '<span class="stage-number">'+(index+1)+'단계</span><strong>'+names[type]+'</strong>'+detail+'</a>';
+  }
+
   function home() {
     screen.replaceChildren(document.querySelector('#home-template').content.cloneNode(true));
     const count=done(fields);
     screen.querySelector('#total').innerHTML='전체 학습 진척도<strong>'+scoreText(rate(count,fields.length))+'%</strong>'+progress(count,fields.length,'전체 학습 진척도')+'<div>'+count+' / '+fields.length+' 정답 경험</div>';
-    screen.querySelector('#modes').innerHTML=Object.entries(names).map(([type,name])=>{
+    screen.querySelector('#modes').innerHTML=stages.map((type,index)=>{
       const rows=questions.filter(q=>q.type===type);
       const list=fields.filter(f=>f.question.type===type);
       const amount=rows.length+(type==='title'?'문항': '절')+(type==='short'?' · '+list.length+'빈칸':'');
-      return '<a class="mode" href="#study/'+type+'"><strong>'+name+'</strong><small>'+amount+' · '+done(list)+'/'+list.length+' 완료</small></a>';
+      return stageCard(type,index,studyHash(type,settings.chapter),'<small>'+amount+' · '+done(list)+'/'+list.length+' 완료</small>');
     }).join('');
     screen.querySelector('#chapters').innerHTML=Array.from({length:7},(_,i)=>{
       const chapter=i+1;
@@ -181,14 +187,11 @@ function run() {
     const scope=chapterName(settings.chapter);
     const rows=questions.filter(q=>q.type===settings.type && (settings.chapter==='all'||q.chapter===Number(settings.chapter)));
     window.history.replaceState(null,'',studyHash(settings.type,settings.chapter));
-    screen.innerHTML=title('암기훈련 · '+scope,'띄어쓰기와 문장부호는 채점에서 제외합니다.')+'<div class="filters"><label>유형<select id="type">'+Object.entries(names).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label></div><div id="exercise"></div>';
-    const mode=screen.querySelector('#type');
-    mode.value=settings.type;
-    mode.addEventListener('change',()=>{
-      study(mode.value,settings.chapter);
-      renderChapterLinks(true);
-      screen.querySelector('#type').focus();
-    });
+    const cards=stages.map((type,index)=>stageCard(
+      type,index,studyHash(type,settings.chapter),'',type===settings.type
+    )).join('');
+    screen.innerHTML=title('암기훈련 · '+scope,'띄어쓰기와 문장부호는 채점에서 제외합니다.')+
+      '<div class="modes study-stages" role="group" aria-label="학습 단계">'+cards+'</div><div id="exercise"></div>';
     exercise(rows.map(q=>({q,list:q.fields.map(f=>byId.get(f.id))})),names[settings.type]+' · '+scope,false);
   }
 
