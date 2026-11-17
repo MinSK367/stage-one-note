@@ -45,3 +45,15 @@ assert.equal(Object.keys(state.mastered).length,118);
 assert.equal(state.history.length,4);
 assert.equal(scoreText(rate(1,3)),'33.33');
 console.log('PASS: 77 prompts, 118 fields, exact grading, differences, error counts, retry, progress, history');
+const filteredReview=initial();
+const [resolvedField, blankField, untouchedField]=fields;
+filteredReview.errors[resolvedField.id]={input:'틀림',count:1};
+filteredReview.errors[untouchedField.id]={input:'틀림',count:2};
+const {attempt}=grade(filteredReview,[
+  {id:resolvedField.id,input:resolvedField.answer},
+  {id:blankField.id,input:''}
+],'오답 다시 풀기',5,true);
+assert.equal(attempt.resolved,1);
+assert.equal(filteredReview.errors[resolvedField.id],undefined);
+assert.equal(filteredReview.errors[blankField.id].count,1);
+assert.equal(filteredReview.errors[untouchedField.id].count,2);

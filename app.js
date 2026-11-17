@@ -22,12 +22,14 @@ const fields = questions.flatMap(q => q.fields.map(f => ({...f,question:q})));
 const byId = new Map(fields.map(f => [f.id,f]));
 const initial = () => ({mastered:{}, errors:{}, history:[]});
 
-function grade(state, answers, label, time) {
+function grade(state, answers, label, time, review=false) {
+  let resolved = 0;
   const results = answers.map(({id,input}) => {
     const field = byId.get(id);
     const correct = exact(field.answer,input);
     if (correct) {
       state.mastered[id] = true;
+      if (review && Object.hasOwn(state.errors,id)) resolved++;
       delete state.errors[id];
     } else {
       state.errors[id] = {input, count:(state.errors[id]?.count || 0) + 1};
@@ -36,6 +38,7 @@ function grade(state, answers, label, time) {
   });
   const correct = results.filter(r => r.correct).length;
   const attempt = {label,time,correct,total:results.length};
+  if (review) attempt.resolved = resolved;
   state.history.push(attempt);
   return {results,attempt};
 }
@@ -80,6 +83,18 @@ function run() {
   let state = initial();
   try { state = JSON.parse(localStorage.getItem(key)) || initial(); } catch {}
   const screen = document.querySelector('#screen');
+  let renderedHash;
+  let hasDraft = false;
+  const unload = event => {
+    event.preventDefault();
+    event.returnValue = '';
+  };
+  function setDraft(value) {
+    if (value === hasDraft) return;
+    hasDraft = value;
+    if (value) window.addEventListener('beforeunload',unload);
+    else window.removeEventListener('beforeunload',unload);
+  }
   const chapterLinks = document.querySelector('#chapter-links');
   const chapters = ['1','2','3','4','5','6','7','all'];
   const settings = {type:stages[0], chapter:'1'};
@@ -144,6 +159,8 @@ function run() {
     const submit=form.querySelector('#grade');
     const restart=form.querySelector('#restart');
     let submitted=false;
+    const inputs=form.querySelectorAll('input,textarea');
+    form.addEventListener('input',()=>setDraft(!submitted && Array.from(inputs).some(input=>input.value!=='')));
     form.addEventListener('submit',event=>event.preventDefault());
     submit.addEventListener('click',()=>{
       if(submitted) return;
@@ -154,8 +171,11 @@ function run() {
         result.focus();
         return;
       }
+      const unanswered=answers.filter(a=>!normalize(a.input)).length;
+      if(unanswered && !window.confirm('미입력 '+unanswered+'칸은 오답노트에 남습니다. 이대로 채점할까요?')) return;
       submitted=true;
-      const {results,attempt}=grade(state,answers,label,Date.now());
+      setDraft(false);
+      const {results,attempt}=grade(state,answers,label,Date.now(),review);
       let saved=true;
       try { localStorage.setItem(key,JSON.stringify(state)); } catch { saved=false; }
       for(const {field,input,correct} of results) {
@@ -169,7 +189,10 @@ function run() {
       }
       const score=scoreText(rate(attempt.correct,attempt.total));
       result.hidden=false;
-      result.innerHTML='<span class="score">'+score+' / 100점</span> · '+attempt.correct+' / '+attempt.total+' 정답'+(saved?'':'<p class="incorrect">브라우저에 학습 기록을 저장할 수 없습니다.</p>');
+      const summary=review
+        ? '오답 '+attempt.resolved+'개 해결 · '+(attempt.total-attempt.resolved)+'개 남음'
+        : score+' / 100점 · '+attempt.correct+' / '+attempt.total+' 정답';
+      result.innerHTML='<span class="score">'+summary+'</span>'+(saved?'':'<p class="incorrect">브라우저에 학습 기록을 저장할 수 없습니다.</p>');
       submit.disabled=true;
       restart.hidden=false;
       restart.textContent=review?'오답노트로 돌아가기':'다시 풀기';
@@ -203,23 +226,52 @@ function run() {
     }).join('');
   }
 
-  function review(mode) {
-    const rows=questions.map(q=>({q,list:q.fields.filter(f=>state.errors[f.id]).map(f=>byId.get(f.id))})).filter(r=>r.list.length);
+  function review(mode,type,chapter) {
+    type=Object.hasOwn(names,type) ? type : 'all';
+    chapter=chapters.includes(chapter) ? chapter : 'all';
+    const scope=(type==='all'?'전체 단계':names[type])+' · '+chapterName(chapter);
+    const listHash='#review/list/'+type+'/'+chapter;
+    const rows=questions.filter(q=>(type==='all'||q.type===type)&&(chapter==='all'||q.chapter===Number(chapter)))
+      .map(q=>({q,list:q.fields.filter(f=>state.errors[f.id]).map(f=>byId.get(f.id))})).filter(r=>r.list.length);
     if(mode==='practice' && rows.length) {
-      screen.innerHTML=title('오답 다시 풀기','정답을 제출하면 해당 항목이 오답노트에서 빠집니다.')+'<div id="exercise"></div>';
-      exercise(rows,'오답 다시 풀기',true,'#review');
+      screen.innerHTML=title('오답 다시 풀기 · '+scope,'정답을 제출하면 해당 항목이 오답노트에서 빠집니다.')+
+        '<p><a class="button secondary" href="'+listHash+'">오답노트로 돌아가기</a></p><div id="exercise"></div>';
+      exercise(rows,'오답 다시 풀기 · '+scope,true,listHash);
       return;
     }
-    screen.innerHTML=title('오답노트','틀리거나 비워 둔 항목을 다시 풀 수 있어요.')+(rows.length?'<p><a class="button" href="#review/practice">오답 다시 풀기</a></p><div class="stack">'+rows.map(({q,list})=>'<article class="question"><h2>'+refLabel(q)+'</h2><small>'+names[q.type]+'</small>'+list.map(f=>{
-      const entry=state.errors[f.id];
-      return '<p><strong>'+fieldName(f)+'</strong> · '+entry.count+'회'+(entry.count>=3?' ★':'')+'</p>'+message(entry.input,f.answer);
-    }).join('')+'</article>').join('')+'</div>':'<div class="panel">기록된 오답이 없습니다.</div>');
+    const option=(value,label)=>'<option value="'+value+'">'+label+'</option>';
+    const chapterOptions=chapters.map(ch=>option(ch,chapterName(ch))).join('');
+    const stageOptions=option('all','전체 단계')+stages.map((stage,i)=>option(stage,(i+1)+'단계 · '+names[stage])).join('');
+    screen.innerHTML=title('오답노트','장과 단계를 선택해 틀리거나 비워 둔 답안을 다시 풀 수 있어요.')+
+      '<div class="filters"><label>장<select id="review-chapter">'+chapterOptions+'</select></label>'+
+      '<label>단계<select id="review-type">'+stageOptions+'</select></label></div>'+
+      (rows.length?'<p><a class="button" href="#review/practice/'+type+'/'+chapter+'">선택한 범위 다시 풀기</a></p><div class="stack">'+rows.map(({q,list})=>'<article class="question"><h2>'+refLabel(q)+'</h2><small>'+names[q.type]+'</small>'+list.map(f=>{
+        const entry=state.errors[f.id];
+        return '<p><strong>'+fieldName(f)+'</strong> · '+entry.count+'회'+(entry.count>=3?' ★':'')+'</p>'+message(entry.input,f.answer);
+      }).join('')+'</article>').join('')+'</div>':'<div class="panel">선택한 범위에 오답이 없습니다.</div>');
+    const stageSelect=screen.querySelector('#review-type');
+    const chapterSelect=screen.querySelector('#review-chapter');
+    stageSelect.value=type;
+    chapterSelect.value=chapter;
+    const update=()=>{ location.hash='#review/list/'+stageSelect.value+'/'+chapterSelect.value; };
+    stageSelect.addEventListener('change',update);
+    chapterSelect.addEventListener('change',update);
   }
 
   function history() {
-    const records=state.history;
+    const isReview = record => Object.hasOwn(record,'resolved') || record.label==='오답 다시 풀기';
+    const records=state.history.filter(record=>!isReview(record));
+    const reviews=state.history.filter(isReview);
     screen.innerHTML=title('학습기록','제출한 회차의 점수와 변화를 볼 수 있어요.');
-    if(!records.length) { screen.innerHTML+='<div class="panel">아직 제출한 회차가 없습니다.</div>'; return; }
+    if(reviews.length) {
+      screen.innerHTML+='<section class="panel section"><h2>오답 복습 기록</h2><ol class="records">'+reviews.slice().reverse().map(r=>
+        '<li><div><strong>'+escape(r.label)+'</strong><br><time datetime="'+new Date(r.time).toISOString()+'">'+date.format(r.time)+'</time></div><strong>'+(r.resolved ?? r.correct)+'개 해결</strong></li>'
+      ).join('')+'</ol></section>';
+    }
+    if(!records.length) {
+      if(!reviews.length) screen.innerHTML+='<div class="panel">아직 제출한 회차가 없습니다.</div>';
+      return;
+    }
     const labels=[...new Set(records.map(r=>r.label))];
     screen.innerHTML+='<div class="filters"><label>유형과 범위<select id="history-filter">'+labels.map((label,i)=>'<option value="'+i+'">'+escape(label)+'</option>').join('')+'</select></label></div><section class="panel" id="growth"></section>';
     const filter=screen.querySelector('#history-filter');
@@ -237,16 +289,17 @@ function run() {
   }
 
   function render(focusHeading=false) {
-    const [page,mode,chapter]=location.hash.slice(1).split('/');
+    const [page,mode,chapter,reviewChapter]=location.hash.slice(1).split('/');
     const active=['study','review','history'].includes(page)?page:'home';
     for(const link of document.querySelectorAll('nav a')) {
       if(link.hash==='#'+active) link.setAttribute('aria-current','page');
       else link.removeAttribute('aria-current');
     }
     if(active==='study') study(mode,chapter);
-    else if(active==='review') review(mode);
+    else if(active==='review') review(mode,chapter,reviewChapter);
     else if(active==='history') history();
     else home();
+    renderedHash=location.hash;
     renderChapterLinks(active==='study');
     window.scrollTo(0,0);
     if(focusHeading) {
@@ -255,6 +308,14 @@ function run() {
       heading.focus();
     }
   }
-  window.addEventListener('hashchange',()=>render(true));
+  window.addEventListener('hashchange',()=>{
+    if(location.hash===renderedHash) return;
+    if(hasDraft && !window.confirm('작성 중인 답안이 사라집니다. 화면을 이동할까요?')) {
+      window.history.replaceState(null,'',renderedHash || '#home');
+      return;
+    }
+    setDraft(false);
+    render(true);
+  });
   render();
 }
