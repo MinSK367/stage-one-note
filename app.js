@@ -93,7 +93,7 @@ function run() {
   const fieldName = field => refLabel(field.question)+(field.question.type==='short' ? ' '+marks[field.index] : '');
   const message = (input,answer) => {
     const marked = diff(answer,input);
-    return '<div class="feedback"><strong class="incorrect">'+(input.trim()?'오답':'미입력')+'</strong><br>내 답안 '+(marked.input || '—')+'<br>정답 '+marked.expected+'</div>';
+    return '<div class="feedback"><strong class="incorrect">'+(normalize(input)?'오답':'미입력')+'</strong><br>내 답안 '+(marked.input || '—')+'<br>정답 '+marked.expected+'</div>';
   };
 
   function stageCard(type,index,href,detail='',active=false) {
@@ -127,7 +127,7 @@ function run() {
 
   function exercise(rows,label,review,returnHash) {
     const host=screen.querySelector('#exercise');
-    host.innerHTML='<form class="stack" id="quiz">'+rows.map(({q,list})=>{
+    host.innerHTML='<form class="stack">'+rows.map(({q,list})=>{
       let content;
       if(q.type==='short') {
         content='<div class="verse-text">'+q.parts.map((p,i)=>{
@@ -138,14 +138,14 @@ function run() {
         }).join('')+'</div>';
       } else content=fieldControl(list[0],fieldName(list[0]),q.type==='verse');
       return '<article class="question"><h2>'+refLabel(q)+'</h2><small>시험지 '+q.page+'쪽</small>'+content+'<div class="stack" data-feedback></div></article>';
-    }).join('')+'<div class="panel" id="result" role="status" tabindex="-1" hidden></div><div class="actions"><button type="submit">채점하기</button><button type="button" class="secondary" id="restart" hidden>다시 풀기</button></div></form>';
+    }).join('')+'<div class="panel" id="result" role="status" tabindex="-1" hidden></div><div class="actions"><button type="button" id="grade">채점하기</button><button type="button" class="secondary" id="restart" hidden>다시 풀기</button></div></form>';
     const form=host.querySelector('form');
     const result=form.querySelector('#result');
-    const submit=form.querySelector('[type=submit]');
+    const submit=form.querySelector('#grade');
     const restart=form.querySelector('#restart');
     let submitted=false;
-    form.addEventListener('submit',event=>{
-      event.preventDefault();
+    form.addEventListener('submit',event=>event.preventDefault());
+    submit.addEventListener('click',()=>{
       if(submitted) return;
       const answers=rows.flatMap(({list})=>list.map(f=>({id:f.id,input:form.elements.namedItem(f.id).value})));
       if(!answers.some(a=>normalize(a.input))) {
@@ -220,11 +220,10 @@ function run() {
     const records=state.history;
     screen.innerHTML=title('학습기록','제출한 회차의 점수와 변화를 볼 수 있어요.');
     if(!records.length) { screen.innerHTML+='<div class="panel">아직 제출한 회차가 없습니다.</div>'; return; }
-    const keyOf = r=>r.label;
-    const labels=[...new Set(records.map(keyOf))];
+    const labels=[...new Set(records.map(r=>r.label))];
     screen.innerHTML+='<div class="filters"><label>유형과 범위<select id="history-filter">'+labels.map((label,i)=>'<option value="'+i+'">'+escape(label)+'</option>').join('')+'</select></label></div><section class="panel" id="growth"></section>';
     const filter=screen.querySelector('#history-filter');
-    filter.value=String(labels.indexOf(keyOf(records.at(-1))));
+    filter.value=String(labels.indexOf(records.at(-1).label));
     const update=()=>{
       const series=records.filter(r=>r.label===labels[Number(filter.value)]);
       const scores=series.map(r=>rate(r.correct,r.total));
@@ -237,7 +236,7 @@ function run() {
     update();
   }
 
-  function render() {
+  function render(focusHeading=false) {
     const [page,mode,chapter]=location.hash.slice(1).split('/');
     const active=['study','review','history'].includes(page)?page:'home';
     for(const link of document.querySelectorAll('nav a')) {
@@ -250,7 +249,12 @@ function run() {
     else home();
     renderChapterLinks(active==='study');
     window.scrollTo(0,0);
+    if(focusHeading) {
+      const heading=screen.querySelector('h1');
+      heading.tabIndex=-1;
+      heading.focus();
+    }
   }
-  window.addEventListener('hashchange',render);
+  window.addEventListener('hashchange',()=>render(true));
   render();
 }
